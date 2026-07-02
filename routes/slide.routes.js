@@ -1,14 +1,18 @@
 const express = require("express");
 const router = express.Router();
 
-const slideController = require("../controllers/slide.controller");
-const adminAuth = require("../middleware/adminAuth.middleware");
+const {
+  createSlide,
+  getAllSlides,
+  getSlideById,
+  updateSlide,
+  deleteSlide,
+} = require("../controllers/slide.controller");
 
-router.post("/create", adminAuth, slideController.createSlide);
-router.get("/", adminAuth, slideController.getAllSlides);
-router.get("/active", adminAuth, slideController.getActiveSlides);
-router.get("/:id", adminAuth, slideController.getSlideById);
-router.patch("/:id", adminAuth, slideController.updateSlide);
-router.delete("/:id", adminAuth, slideController.deleteSlide);
+router.post("/", createSlide);
+router.get("/", getAllSlides);
+router.get("/:id", getSlideById);
+router.put("/:id", updateSlide);
+router.delete("/:id", deleteSlide);
 
 module.exports = router;

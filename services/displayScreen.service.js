@@ -1,264 +1,324 @@
 const pool = require("../config/db.config");
 
-async function createDisplayScreen(data) {
-  const {
-    screen_name,
-    screen_code,
-    location_name = null,
-    device_token = null,
-    last_seen_at = null,
-    is_active = 1,
-  } = data;
-
-  if (!screen_name || !screen_code) {
-    throw new Error("screen_name and screen_code are required");
-  }
-
-  const connection = await pool.getConnection();
-
-  try {
-    const [existing] = await connection.query(
-      `SELECT id FROM display_screens WHERE screen_code = ? LIMIT 1`,
-      [screen_code]
-    );
-
-    if (existing.length > 0) {
-      throw new Error("Display screen with this screen_code already exists");
-    }
-
-    const [result] = await connection.query(
-      `
-      INSERT INTO display_screens (
-        screen_name,
-        screen_code,
-        location_name,
-        device_token,
-        last_seen_at,
-        is_active
-      )
-      VALUES (?, ?, ?, ?, ?, ?)
-      `,
-      [
-        screen_name,
-        screen_code,
-        location_name,
-        device_token,
-        last_seen_at,
-        is_active,
-      ]
-    );
-
-    const [rows] = await connection.query(
-      `
-      SELECT
-        id,
-        screen_name,
-        screen_code,
-        location_name,
-        device_token,
-        last_seen_at,
-        is_active,
-        created_at,
-        updated_at
-      FROM display_screens
-      WHERE id = ?
-      LIMIT 1
-      `,
-      [result.insertId]
-    );
-
-    return rows[0];
-  } finally {
-    connection.release();
-  }
-}
-
-async function getAllDisplayScreens() {
-  const connection = await pool.getConnection();
-
-  try {
-    const [rows] = await connection.query(
-      `
-      SELECT
-        id,
-        screen_name,
-        screen_code,
-        location_name,
-        device_token,
-        last_seen_at,
-        is_active,
-        created_at,
-        updated_at
-      FROM display_screens
-      ORDER BY created_at DESC
-      `
-    );
-
-    return rows;
-  } finally {
-    connection.release();
-  }
+function normalizeScreenCode(screenCode) {
+  return String(screenCode || "")
+    .trim()
+    .toUpperCase()
+    .replace(/\s+/g, "-");
 }
 
 async function getDisplayScreenById(id) {
-  const connection = await pool.getConnection();
+  const [rows] = await pool.query(
+    `
+    SELECT
+      ds.id,
+      ds.screen_name,
+      ds.screen_code,
+      ds.location_id,
+      dl.location_name,
+      dl.location_code,
+      ds.device_token,
+      ds.last_seen_at,
+      ds.is_active,
+      ds.created_at,
+      ds.updated_at
+    FROM display_screens ds
+    LEFT JOIN display_locations dl
+      ON ds.location_id = dl.id
+    WHERE ds.id = ?
+    `,
+    [id]
+  );
 
-  try {
-    const [rows] = await connection.query(
-      `
-      SELECT
-        id,
-        screen_name,
-        screen_code,
-        location_name,
-        device_token,
-        last_seen_at,
-        is_active,
-        created_at,
-        updated_at
-      FROM display_screens
-      WHERE id = ?
-      LIMIT 1
-      `,
-      [id]
-    );
-
-    return rows[0] || null;
-  } finally {
-    connection.release();
-  }
+  return rows[0] || null;
 }
 
 async function getDisplayScreenByCode(screenCode) {
-  const connection = await pool.getConnection();
+  const [rows] = await pool.query(
+    `
+    SELECT
+      ds.id,
+      ds.screen_name,
+      ds.screen_code,
+      ds.location_id,
+      dl.location_name,
+      dl.location_code,
+      ds.device_token,
+      ds.last_seen_at,
+      ds.is_active,
+      ds.created_at,
+      ds.updated_at
+    FROM display_screens ds
+    LEFT JOIN display_locations dl
+      ON ds.location_id = dl.id
+    WHERE ds.screen_code = ?
+    `,
+    [screenCode]
+  );
 
-  try {
-    const [rows] = await connection.query(
-      `
-      SELECT
-        id,
-        screen_name,
-        screen_code,
-        location_name,
-        device_token,
-        last_seen_at,
-        is_active,
-        created_at,
-        updated_at
-      FROM display_screens
-      WHERE screen_code = ?
-      LIMIT 1
-      `,
-      [screenCode]
-    );
-
-    return rows[0] || null;
-  } finally {
-    connection.release();
-  }
+  return rows[0] || null;
 }
 
-async function updateDisplayScreen(id, data) {
+async function getAllDisplayScreens({ activeOnly = false } = {}) {
+  let sql = `
+    SELECT
+      ds.id,
+      ds.screen_name,
+      ds.screen_code,
+      ds.location_id,
+      dl.location_name,
+      dl.location_code,
+      ds.device_token,
+      ds.last_seen_at,
+      ds.is_active,
+      ds.created_at,
+      ds.updated_at
+    FROM display_screens ds
+    LEFT JOIN display_locations dl
+      ON ds.location_id = dl.id
+  `;
+
+  if (activeOnly) {
+    sql += ` WHERE ds.is_active = 1 `;
+  }
+
+  sql += `
+    ORDER BY
+      dl.location_name ASC,
+      ds.screen_name ASC
+  `;
+
+  const [rows] = await pool.query(sql);
+
+  return rows;
+}
+
+async function createDisplayScreen(payload) {
   const {
     screen_name,
     screen_code,
-    location_name,
+    location_id,
     device_token,
-    last_seen_at,
     is_active,
-  } = data;
+  } = payload;
 
-  const connection = await pool.getConnection();
+  if (!screen_name) {
+    throw new Error("Screen name is required");
+  }
 
-  try {
-    const [existing] = await connection.query(
-      `SELECT id, screen_code FROM display_screens WHERE id = ? LIMIT 1`,
-      [id]
-    );
+  if (!screen_code) {
+    throw new Error("Screen code is required");
+  }
 
-    if (existing.length === 0) {
-      throw new Error("Display screen not found");
-    }
+  const normalizedScreenCode = normalizeScreenCode(screen_code);
 
-    if (screen_code && screen_code !== existing[0].screen_code) {
-      const [duplicate] = await connection.query(
-        `SELECT id FROM display_screens WHERE screen_code = ? AND id != ? LIMIT 1`,
-        [screen_code, id]
-      );
+  const [existingRows] = await pool.query(
+    `
+    SELECT id
+    FROM display_screens
+    WHERE screen_code = ?
+    LIMIT 1
+    `,
+    [normalizedScreenCode]
+  );
 
-      if (duplicate.length > 0) {
-        throw new Error("Another display screen already uses this screen_code");
-      }
-    }
+  if (existingRows.length > 0) {
+    throw new Error("Screen code already exists");
+  }
 
-    await connection.query(
+  if (location_id) {
+    const [locationRows] = await pool.query(
       `
-      UPDATE display_screens
-      SET
-        screen_name = COALESCE(?, screen_name),
-        screen_code = COALESCE(?, screen_code),
-        location_name = COALESCE(?, location_name),
-        device_token = COALESCE(?, device_token),
-        last_seen_at = COALESCE(?, last_seen_at),
-        is_active = COALESCE(?, is_active),
-        updated_at = CURRENT_TIMESTAMP
+      SELECT id
+      FROM display_locations
       WHERE id = ?
-      `,
-      [
-        screen_name ?? null,
-        screen_code ?? null,
-        location_name ?? null,
-        device_token ?? null,
-        last_seen_at ?? null,
-        is_active ?? null,
-        id,
-      ]
-    );
-
-    const [rows] = await connection.query(
-      `
-      SELECT
-        id,
-        screen_name,
-        screen_code,
-        location_name,
-        device_token,
-        last_seen_at,
-        is_active,
-        created_at,
-        updated_at
-      FROM display_screens
-      WHERE id = ?
+        AND is_active = 1
       LIMIT 1
       `,
-      [id]
+      [location_id]
     );
 
-    return rows[0];
-  } finally {
-    connection.release();
+    if (locationRows.length === 0) {
+      throw new Error("Selected display location does not exist");
+    }
   }
+
+  const [result] = await pool.query(
+    `
+    INSERT INTO display_screens (
+      screen_name,
+      screen_code,
+      location_id,
+      device_token,
+      is_active
+    )
+    VALUES (?, ?, ?, ?, ?)
+    `,
+    [
+      screen_name.trim(),
+      normalizedScreenCode,
+      location_id || null,
+      device_token || null,
+      typeof is_active === "undefined" ? 1 : is_active,
+    ]
+  );
+
+  return getDisplayScreenById(result.insertId);
+}
+
+async function updateDisplayScreen(id, payload) {
+  const existing = await getDisplayScreenById(id);
+
+  if (!existing) {
+    throw new Error("Display screen not found");
+  }
+
+  const {
+    screen_name,
+    screen_code,
+    location_id,
+    device_token,
+    is_active,
+  } = payload;
+
+  let normalizedScreenCode = null;
+
+  if (screen_code) {
+    normalizedScreenCode = normalizeScreenCode(screen_code);
+
+    const [duplicateRows] = await pool.query(
+      `
+      SELECT id
+      FROM display_screens
+      WHERE screen_code = ?
+        AND id <> ?
+      LIMIT 1
+      `,
+      [normalizedScreenCode, id]
+    );
+
+    if (duplicateRows.length > 0) {
+      throw new Error("Screen code already exists");
+    }
+  }
+
+  if (location_id) {
+    const [locationRows] = await pool.query(
+      `
+      SELECT id
+      FROM display_locations
+      WHERE id = ?
+        AND is_active = 1
+      LIMIT 1
+      `,
+      [location_id]
+    );
+
+    if (locationRows.length === 0) {
+      throw new Error("Selected display location does not exist");
+    }
+  }
+
+  await pool.query(
+    `
+    UPDATE display_screens
+    SET
+      screen_name = COALESCE(?, screen_name),
+      screen_code = COALESCE(?, screen_code),
+      location_id = ?,
+      device_token = ?,
+      is_active = COALESCE(?, is_active)
+    WHERE id = ?
+    `,
+    [
+      screen_name ? screen_name.trim() : null,
+      normalizedScreenCode,
+      typeof location_id === "undefined" ? existing.location_id : location_id,
+      typeof device_token === "undefined" ? existing.device_token : device_token,
+      typeof is_active === "undefined" ? null : is_active,
+      id,
+    ]
+  );
+
+  return getDisplayScreenById(id);
 }
 
 async function deleteDisplayScreen(id) {
-  const connection = await pool.getConnection();
+  const existing = await getDisplayScreenById(id);
 
-  try {
-    const [existing] = await connection.query(
-      `SELECT id FROM display_screens WHERE id = ? LIMIT 1`,
-      [id]
-    );
-
-    if (existing.length === 0) {
-      throw new Error("Display screen not found");
-    }
-
-    await connection.query(`DELETE FROM display_screens WHERE id = ?`, [id]);
-
-    return true;
-  } finally {
-    connection.release();
+  if (!existing) {
+    throw new Error("Display screen not found");
   }
+
+  // Soft delete. This keeps slide assignment history but hides the TV.
+  await pool.query(
+    `
+    UPDATE display_screens
+    SET is_active = 0
+    WHERE id = ?
+    `,
+    [id]
+  );
+
+  return true;
+}
+
+async function touchDisplayScreenLastSeen(screenCode) {
+  await pool.query(
+    `
+    UPDATE display_screens
+    SET last_seen_at = NOW()
+    WHERE screen_code = ?
+    `,
+    [screenCode]
+  );
+}
+
+async function getSlidesForDisplayScreen(screenCode) {
+  if (!screenCode) {
+    throw new Error("Screen code is required");
+  }
+
+  const normalizedScreenCode = normalizeScreenCode(screenCode);
+
+  const screen = await getDisplayScreenByCode(normalizedScreenCode);
+
+  if (!screen || Number(screen.is_active) !== 1) {
+    throw new Error("Display screen not found");
+  }
+
+  const [rows] = await pool.query(
+    `
+    SELECT
+      s.id,
+      s.title,
+      s.message,
+      s.image_url,
+      s.slide_order,
+      s.duration_seconds,
+      s.start_at,
+      s.end_at,
+      s.is_active,
+      s.created_at,
+      s.updated_at
+    FROM display_screens ds
+    INNER JOIN slide_display_screens sds
+      ON ds.id = sds.screen_id
+    INNER JOIN slides s
+      ON sds.slide_id = s.id
+    WHERE ds.screen_code = ?
+      AND ds.is_active = 1
+      AND s.is_active = 1
+      AND (s.start_at IS NULL OR s.start_at <= NOW())
+      AND (s.end_at IS NULL OR s.end_at >= NOW())
+    ORDER BY s.slide_order ASC, s.created_at DESC
+    `,
+    [normalizedScreenCode]
+  );
+
+  await touchDisplayScreenLastSeen(normalizedScreenCode);
+
+  return rows;
 }
 
 module.exports = {
@@ -268,4 +328,5 @@ module.exports = {
   getDisplayScreenByCode,
   updateDisplayScreen,
   deleteDisplayScreen,
+  getSlidesForDisplayScreen,
 };

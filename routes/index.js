@@ -7,6 +7,7 @@ const announcementRoutes = require("./announcement.routes");
 const slideRoutes = require("./slide.routes");
 const displayScreenRoutes = require("./displayScreen.routes");
 const publicDisplayRoutes = require("./publicDisplay.routes");
+const displaylocation = require("./publicDisplay.routes");
 
 
 router.use("/prayers", prayerRoutes);
@@ -15,5 +16,6 @@ router.use("/announcements", announcementRoutes);
 router.use("/slides", slideRoutes);
 router.use("/display-screens", displayScreenRoutes);
 router.use("/public", publicDisplayRoutes)
+router.use("/display-locations", displaylocation)
 
 module.exports = router;

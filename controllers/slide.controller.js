@@ -1,11 +1,9 @@
+
 const slideService = require("../services/slide.service");
 
 async function createSlide(req, res) {
   try {
-    const slide = await slideService.createSlide(
-      req.body,
-      req.admin.profile_id
-    );
+    const slide = await slideService.createSlide(req.body);
 
     return res.status(201).json({
       success: true,
@@ -33,23 +31,6 @@ async function getAllSlides(req, res) {
     return res.status(500).json({
       success: false,
       message: error.message || "Failed to fetch slides",
-    });
-  }
-}
-
-async function getActiveSlides(req, res) {
-  try {
-    const slides = await slideService.getActiveSlides();
-
-    return res.status(200).json({
-      success: true,
-      count: slides.length,
-      slides,
-    });
-  } catch (error) {
-    return res.status(500).json({
-      success: false,
-      message: error.message || "Failed to fetch active slides",
     });
   }
 }
@@ -117,7 +98,6 @@ async function deleteSlide(req, res) {
 module.exports = {
   createSlide,
   getAllSlides,
-  getActiveSlides,
   getSlideById,
   updateSlide,
   deleteSlide,

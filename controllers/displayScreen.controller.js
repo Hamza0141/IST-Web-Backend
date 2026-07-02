@@ -2,7 +2,9 @@ const displayScreenService = require("../services/displayScreen.service");
 
 async function createDisplayScreen(req, res) {
   try {
-    const displayScreen = await displayScreenService.createDisplayScreen(req.body);
+    const displayScreen = await displayScreenService.createDisplayScreen(
+      req.body
+    );
 
     return res.status(201).json({
       success: true,
@@ -19,7 +21,11 @@ async function createDisplayScreen(req, res) {
 
 async function getAllDisplayScreens(req, res) {
   try {
-    const displayScreens = await displayScreenService.getAllDisplayScreens();
+    const activeOnly = req.query.activeOnly === "true";
+
+    const displayScreens = await displayScreenService.getAllDisplayScreens({
+      activeOnly,
+    });
 
     return res.status(200).json({
       success: true,
@@ -101,10 +107,34 @@ async function deleteDisplayScreen(req, res) {
   }
 }
 
+async function getSlidesForDisplayScreen(req, res) {
+  try {
+    const slides = await displayScreenService.getSlidesForDisplayScreen(
+      req.params.screenCode
+    );
+
+    return res.status(200).json({
+      success: true,
+      screen_code: req.params.screenCode,
+      count: slides.length,
+      slides,
+    });
+  } catch (error) {
+    const statusCode =
+      error.message === "Display screen not found" ? 404 : 500;
+
+    return res.status(statusCode).json({
+      success: false,
+      message: error.message || "Failed to fetch slides for display screen",
+    });
+  }
+}
+
 module.exports = {
   createDisplayScreen,
   getAllDisplayScreens,
   getDisplayScreenById,
   updateDisplayScreen,
   deleteDisplayScreen,
+  getSlidesForDisplayScreen,
 };
